@@ -35,3 +35,5 @@ jobs:
 
       - name: Deploy to AWS
         run: npx serverless deploy
+        env:
+          SERVERLESS_LICENSE_KEY: ${{ secrets.SERVERLESS_LICENSE_KEY }}
