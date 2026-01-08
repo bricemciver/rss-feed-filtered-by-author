@@ -1,0 +1,12 @@
+{
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.159",
+    "@types/xml2js": "^0.4.14",
+    "serverless": "^4.29.4",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "axios": "^1.13.2",
+    "xml2js": "^0.6.2"
+  }
+}
