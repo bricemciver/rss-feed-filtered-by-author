@@ -34,30 +34,12 @@ interface RSSFeed {
   feed?: unknown;
 }
 
-const RSS_FEED_URL = process.env.RSS_FEED_URL || "https://example.com/feed.xml";
-const WHITELIST = process.env.AUTHOR_WHITELIST
-  ? process.env.AUTHOR_WHITELIST.split(",")
-  : [];
-const BLACKLIST = process.env.AUTHOR_BLACKLIST
-  ? process.env.AUTHOR_BLACKLIST.split(",")
-  : [];
-
 const fetchFeed = async (url: string): Promise<string> => {
-  try {
-    const response = await axios.get(url, {
-      // 10 second timeout
-      timeout: 10000,
-      headers: {
-        "User-Agent": "RSS-Filter-Lambda/1.0",
-      },
-    });
-    return response.data;
-  } catch (error) {
-    if (axios.isAxiosError(error)) {
-      throw new Error(`Failed to fetch feed: ${error.message}`);
-    }
-    throw error;
-  }
+  const response = await axios.get(url, {
+    // 10 second timeout
+    timeout: 10000,
+  });
+  return response.data;
 };
 
 const filterFeed = (feed: RSSFeed, config: FilterConfig): RSSFeed => {
@@ -78,14 +60,12 @@ const filterFeed = (feed: RSSFeed, config: FilterConfig): RSSFeed => {
     }
 
     // Check blacklist first
-    if (config.blacklist && config.blacklist.length > 0) {
-      if (
-        config.blacklist.some((blocked) =>
-          author.toLowerCase().includes(blocked.toLowerCase()),
-        )
-      ) {
-        return false;
-      }
+    if (
+      config.blacklist?.some((blocked) =>
+        author.toLowerCase().includes(blocked.toLowerCase()),
+      )
+    ) {
+      return false;
     }
 
     // Check whitelist
@@ -128,6 +108,15 @@ export const rssFeed: Handler<
   APIGatewayProxyResult
 > = async (event) => {
   try {
+    const RSS_FEED_URL =
+      process.env.RSS_FEED_URL || "https://example.com/feed.xml";
+    const WHITELIST = process.env.AUTHOR_WHITELIST
+      ? process.env.AUTHOR_WHITELIST.split(",")
+      : [];
+    const BLACKLIST = process.env.AUTHOR_BLACKLIST
+      ? process.env.AUTHOR_BLACKLIST.split(",")
+      : [];
+
     // Parse query parameters for dynamic filtering
     const whitelist = event.queryStringParameters?.whitelist
       ? event.queryStringParameters.whitelist.split(",")
@@ -153,13 +142,16 @@ export const rssFeed: Handler<
     return {
       statusCode: 200,
       headers: {
-        "Content-Type": "application/xml",
+        "Content-Type": "application/rss+xml",
         "Access-Control-Allow-Origin": "*",
       },
       body: filteredXml,
     } as APIGatewayProxyResult;
   } catch (error) {
-    console.error("Error processing RSS feed:", error);
+    let message = "Unknown error";
+    if (axios.isAxiosError(error)) {
+      message = JSON.stringify(error.toJSON());
+    }
     return {
       statusCode: 500,
       headers: {
@@ -167,7 +159,7 @@ export const rssFeed: Handler<
       },
       body: JSON.stringify({
         error: "Failed to process RSS feed",
-        message: error instanceof Error ? error.message : "Unknown error",
+        message,
       }),
     } as APIGatewayProxyResult;
   }
