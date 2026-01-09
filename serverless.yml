@@ -4,9 +4,12 @@ service: rss-feed-filtered-by-author
 provider:
   name: aws
   runtime: nodejs24.x
-  # Uncomment to easily set up a custom domain. Read the docs for more details:
-  # https://www.serverless.com/framework/docs/providers/aws/guide/domains
-  # domain: api.example.com
+  domain:
+    name: ${ssm:/rss-feed-filtered-by-author/domain-name}
+    certificateArn: ${ssm:/rss-feed-filtered-by-author/domain-certificate-arn}
+    createRoute53Record: false
+    apiType: http
+    endpointType: regional
   environment:
     RSS_FEED_URL: ${ssm:/rss-feed-filtered-by-author/rss-feed-url}
     AUTHOR_WHITELIST: ${ssm:/rss-feed-filtered-by-author/author-whitelist, ""}
