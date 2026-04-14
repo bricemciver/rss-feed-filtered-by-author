@@ -1,0 +1,16 @@
+name = "rss-feed-filtered-by-author"
+main = "./handler.ts"
+compatibility_date = "2024-09-23"
+
+# Enable Node.js compatibility for native fetch and other Node.js globals
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+RSS_FEED_URL = "https://example.com/feed.xml"
+AUTHOR_WHITELIST = ""
+AUTHOR_BLACKLIST = ""
+
+# For production, set these as secrets:
+# wrangler secret put RSS_FEED_URL
+# wrangler secret put AUTHOR_WHITELIST
+# wrangler secret put AUTHOR_BLACKLIST

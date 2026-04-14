@@ -1,10 +1,4 @@
-import {
-  APIGatewayProxyEvent,
-  APIGatewayProxyResult,
-  Handler,
-} from "aws-lambda";
-import axios from "axios";
-import { parseStringPromise } from "xml2js";
+import { parseStringPromise } from 'xml2js';
 
 interface FilterConfig {
   whitelist?: string[];
@@ -16,7 +10,7 @@ interface RSSItem {
   link?: string[];
   description?: string[];
   author?: string[];
-  "dc:creator"?: string[];
+  'dc:creator'?: string[];
   pubDate?: string[];
   guid?: unknown[];
 }
@@ -35,11 +29,25 @@ interface RSSFeed {
 }
 
 const fetchFeed = async (url: string): Promise<string> => {
-  const response = await axios.get(url, {
-    // 10 second timeout
-    timeout: 10000,
-  });
-  return response.data;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    return await response.text();
+  } catch (error) {
+    clearTimeout(timeoutId);
+    throw error;
+  }
 };
 
 const filterFeed = (feed: RSSFeed, config: FilterConfig): RSSFeed => {
@@ -60,19 +68,13 @@ const filterFeed = (feed: RSSFeed, config: FilterConfig): RSSFeed => {
     }
 
     // Check blacklist first
-    if (
-      config.blacklist?.some((blocked) =>
-        author.toLowerCase().includes(blocked.toLowerCase()),
-      )
-    ) {
+    if (config.blacklist?.some((blocked) => author.toLowerCase().includes(blocked.toLowerCase()))) {
       return false;
     }
 
     // Check whitelist
     if (config.whitelist && config.whitelist.length > 0) {
-      return config.whitelist.some((allowed) =>
-        author.toLowerCase().includes(allowed.toLowerCase()),
-      );
+      return config.whitelist.some((allowed) => author.toLowerCase().includes(allowed.toLowerCase()));
     }
 
     // If no whitelist, include the item (it passed blacklist check)
@@ -97,70 +99,71 @@ const getAuthor = (item: RSSItem): string | null => {
   if (item.author?.[0]) {
     return item.author[0];
   }
-  if (item["dc:creator"]?.[0]) {
-    return item["dc:creator"][0];
+  if (item['dc:creator']?.[0]) {
+    return item['dc:creator'][0];
   }
   return null;
 };
 
-export const rssFeed: Handler<
-  APIGatewayProxyEvent,
-  APIGatewayProxyResult
-> = async (event) => {
-  try {
-    const RSS_FEED_URL =
-      process.env.RSS_FEED_URL || "https://example.com/feed.xml";
-    const WHITELIST = process.env.AUTHOR_WHITELIST
-      ? process.env.AUTHOR_WHITELIST.split(",")
-      : [];
-    const BLACKLIST = process.env.AUTHOR_BLACKLIST
-      ? process.env.AUTHOR_BLACKLIST.split(",")
-      : [];
+export default {
+  async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
+    try {
+      const url = new URL(request.url);
+      const RSS_FEED_URL = env.RSS_FEED_URL || 'https://example.com/feed.xml';
+      const WHITELIST = env.AUTHOR_WHITELIST ? env.AUTHOR_WHITELIST.split(',') : [];
+      const BLACKLIST = env.AUTHOR_BLACKLIST ? env.AUTHOR_BLACKLIST.split(',') : [];
 
-    // Parse query parameters for dynamic filtering
-    const whitelist = event.queryStringParameters?.whitelist
-      ? event.queryStringParameters.whitelist.split(",")
-      : WHITELIST;
-    const blacklist = event.queryStringParameters?.blacklist
-      ? event.queryStringParameters.blacklist.split(",")
-      : BLACKLIST;
+      // Parse query parameters for dynamic filtering
+      const whitelistParam = url.searchParams.get('whitelist');
+      const blacklistParam = url.searchParams.get('blacklist');
 
-    // Fetch the RSS feed
-    const feedXml = await fetchFeed(RSS_FEED_URL);
+      const whitelist = whitelistParam ? whitelistParam.split(',') : WHITELIST;
+      const blacklist = blacklistParam ? blacklistParam.split(',') : BLACKLIST;
 
-    // Parse the XML
-    const parsedFeed: RSSFeed = await parseStringPromise(feedXml);
+      // Fetch the RSS feed
+      const feedXml = await fetchFeed(RSS_FEED_URL);
 
-    // Filter the feed
-    const filteredFeed = filterFeed(parsedFeed, { whitelist, blacklist });
+      // Parse the XML
+      const parsedFeed: RSSFeed = await parseStringPromise(feedXml);
 
-    // Convert back to XML
-    const { Builder } = await import("xml2js");
-    const builder = new Builder();
-    const filteredXml = builder.buildObject(filteredFeed);
+      // Filter the feed
+      const filteredFeed = filterFeed(parsedFeed, { whitelist, blacklist });
 
-    return {
-      statusCode: 200,
-      headers: {
-        "Content-Type": "application/rss+xml",
-        "Access-Control-Allow-Origin": "*",
-      },
-      body: filteredXml,
-    } as APIGatewayProxyResult;
-  } catch (error) {
-    let message = "Unknown error";
-    if (axios.isAxiosError(error)) {
-      message = JSON.stringify(error.toJSON());
+      // Convert back to XML
+      const { Builder } = await import('xml2js');
+      const builder = new Builder();
+      const filteredXml = builder.buildObject(filteredFeed);
+
+      return new Response(filteredXml, {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/rss+xml',
+          'Access-Control-Allow-Origin': '*',
+        },
+      });
+    } catch (error) {
+      let message = 'Unknown error';
+      if (error instanceof Error) {
+        message = error.message;
+      }
+      return new Response(
+        JSON.stringify({
+          error: 'Failed to process RSS feed',
+          message,
+        }),
+        {
+          status: 500,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        },
+      );
     }
-    return {
-      statusCode: 500,
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        error: "Failed to process RSS feed",
-        message,
-      }),
-    } as APIGatewayProxyResult;
-  }
-};
+  },
+} satisfies ExportedHandler<Env>;
+
+interface Env {
+  RSS_FEED_URL?: string;
+  AUTHOR_WHITELIST?: string;
+  AUTHOR_BLACKLIST?: string;
+}
