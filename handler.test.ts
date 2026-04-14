@@ -1,5 +1,5 @@
+import { describe, expect, it } from 'vitest';
 import rssFeed from './handler';
-import { describe, it, expect } from 'vitest';
 
 describe('rssFeed handler', () => {
   it('should fetch, filter, and return the RSS feed', async () => {
@@ -17,7 +17,7 @@ describe('rssFeed handler', () => {
     };
 
     // Execute the handler
-    const response = await rssFeed.fetch(request, env);
+    const response = await rssFeed.fetch(request, env, {} as ExecutionContext);
 
     expect(response.status).toBe(200);
     expect(response.headers.get('Content-Type')).toBe('application/rss+xml');
